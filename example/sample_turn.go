@@ -129,7 +129,10 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 			}
 
 			msg := string(buf[:n])
-			if sentAt, pingerErr := time.Parse(time.RFC3339Nano, msg); pingerErr == nil {
+			log.Printf("#STEP3: read time from relayConn: %s", msg)
+			timeStr := strings.TrimPrefix(msg, "return:")
+
+			if sentAt, pingerErr := time.Parse(time.RFC3339Nano, timeStr); pingerErr == nil {
 				rtt := time.Since(sentAt)
 				log.Printf("%d bytes from from %s time=%d ms\n", n, from.String(), int(rtt.Seconds()*1000))
 			}
@@ -145,8 +148,11 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 				break
 			}
 
+			log.Printf("#STEP2: read time from relayConn and wrtie back: %s", string(buf[:n]))
+			msg := "return:" + string(buf[:n])
+
 			// Echo back
-			if _, readerErr = relayConn.WriteTo(buf[:n], from); readerErr != nil {
+			if _, readerErr = relayConn.WriteTo([]byte(msg), from); readerErr != nil {
 				break
 			}
 		}
@@ -157,6 +163,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 	// Send 10 packets from relayConn to the echo server
 	for i := 0; i < 10; i++ {
 		msg := time.Now().Format(time.RFC3339Nano)
+		log.Printf("#STEP1: write time from pingerConn to relay addr: %s", msg)
 		_, err = pingerConn.WriteTo([]byte(msg), relayConn.LocalAddr())
 		if err != nil {
 			return err
