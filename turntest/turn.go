@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pion/logging"
@@ -14,8 +15,8 @@ import (
 )
 
 const (
-	minPackageSize   = 128
-	minPackageWaitMs = time.Microsecond * 100
+	minPackageSize = 128
+	minPackageWait = time.Microsecond * 100
 )
 
 type TrunRequestST struct {
@@ -23,7 +24,7 @@ type TrunRequestST struct {
 	Log            logging.LeveledLogger
 	ChanId         uint64
 	PackageSize    int32
-	PackageWaitMs  time.Duration
+	PackageWait    time.Duration
 	StunServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
 	TurnServerAddr string // TURN server addrees (e.g. "turn.abc.com:3478")
 	Username       string
@@ -37,7 +38,7 @@ func TrunRequest(req *TrunRequestST) error {
 		return err
 	}
 
-	if req.Ctx == nil || req.Log == nil || req.PackageSize < minPackageSize || req.PackageWaitMs < minPackageWaitMs || req.TurnServerAddr == "" {
+	if req.Ctx == nil || req.Log == nil || req.PackageSize < minPackageSize || req.PackageWait < minPackageWait || req.TurnServerAddr == "" {
 		err := fmt.Errorf("[TrunRequest-%d]Paramters error", req.ChanId)
 		return err
 	}
@@ -109,16 +110,19 @@ func doTrunRequest(req *TrunRequestST) error {
 	}
 	defer senderConn.Close()
 
-	var mappedAddr net.Addr
+	// Send BindingRequest to learn our external IP
+	mappedAddr, err := client.SendBindingRequest()
+	if err != nil {
+		req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
+		return err
+	}
+
+	// [workaround] server with pulibc ip will usually have a local ip but mapping all port to local ip
+	// so use public ip and connection port
 	if req.PublicIPTst {
-		mappedAddr = senderConn.LocalAddr()
-	} else {
-		// Send BindingRequest to learn our external IP
-		mappedAddr, err = client.SendBindingRequest()
-		if err != nil {
-			req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
-			return err
-		}
+		addrIp := strings.Split(mappedAddr.String(), ":")
+		addrPort := strings.Split(senderConn.LocalAddr().String(), ":")
+		mappedAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%s", addrIp[0], addrPort[1]))
 	}
 
 	// added mappedAddr (without port) to permission list in turn server
@@ -205,7 +209,7 @@ func doTrunRequest(req *TrunRequestST) error {
 		}
 		byteSend += uint64(len(sendBuf))
 
-		time.Sleep(req.PackageWaitMs)
+		time.Sleep(req.PackageWait)
 
 		since := time.Since(timeSend).Seconds()
 

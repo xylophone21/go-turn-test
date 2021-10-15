@@ -27,7 +27,7 @@ func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string
 	req.Log = log
 	req.ChanId = 0x1234567890
 	req.PackageSize = 1024
-	req.PackageWaitMs = time.Millisecond * 1000
+	req.PackageWait = time.Millisecond * 1000
 	req.StunServerAddr = StunServerAddr
 	req.TurnServerAddr = TurnServerAddr
 	req.Username = Username
