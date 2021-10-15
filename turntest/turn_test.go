@@ -13,7 +13,7 @@ import (
 	"github.com/pion/logging"
 )
 
-func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string, Password string) error {
+func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	defer cancel()
 
@@ -32,6 +32,7 @@ func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string
 	req.TurnServerAddr = TurnServerAddr
 	req.Username = Username
 	req.Password = Password
+	req.PublicIPTst = PublicIPTst
 
 	log.Infof("TurnServerAddr=%s", TurnServerAddr)
 
@@ -40,7 +41,7 @@ func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string
 
 func TestBasic(t *testing.T) {
 
-	err := doTurnRequest("", "", "", "")
+	err := doTurnRequest("", "", "", "", true)
 
 	if err != nil {
 		t.FailNow()
@@ -90,7 +91,7 @@ func TestAws(t *testing.T) {
 			urlStr := respBody.Data.AppIceServers[i].Urls[j]
 			u, _ := url.Parse(urlStr)
 			if u.Scheme == "turn" {
-				err := doTurnRequest("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password)
+				err := doTurnRequest("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
 				if err != nil {
 					t.FailNow()
 				}

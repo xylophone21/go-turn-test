@@ -28,6 +28,7 @@ type TrunRequestST struct {
 	TurnServerAddr string // TURN server addrees (e.g. "turn.abc.com:3478")
 	Username       string
 	Password       string
+	PublicIPTst    bool // AWS TURN doest not ignored port in create permission and and will not response for BindingRequest, so we have to test it with public IP
 }
 
 func TrunRequest(req *TrunRequestST) error {
@@ -99,22 +100,26 @@ func doTrunRequest(req *TrunRequestST) error {
 	}
 	defer relayConn.Close()
 
-	// Send BindingRequest to learn our external IP
-	mappedAddr, err := client.SendBindingRequest()
-	// mappedAddr, err := net.ResolveUDPAddr("udp", "218.17.89.85:12345")
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
-		return err
-	}
-
 	// Set up sender socket (pingerConn)
-	var lc1 net.ListenConfig
-	senderConn, err := lc1.ListenPacket(req.Ctx, "udp4", "0.0.0.0:0")
+	var d net.Dialer
+	senderConn, err := d.DialContext(req.Ctx, relayConn.LocalAddr().Network(), relayConn.LocalAddr().String())
 	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]lc1.ListenPacket error:%s", req.ChanId, err)
+		req.Log.Warnf("[TrunRequest-%d]d.DialContext error:%s", req.ChanId, err)
 		return err
 	}
 	defer senderConn.Close()
+
+	var mappedAddr net.Addr
+	if req.PublicIPTst {
+		mappedAddr = senderConn.LocalAddr()
+	} else {
+		// Send BindingRequest to learn our external IP
+		mappedAddr, err = client.SendBindingRequest()
+		if err != nil {
+			req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
+			return err
+		}
+	}
 
 	// added mappedAddr (without port) to permission list in turn server
 	_, err = relayConn.WriteTo([]byte(fmt.Sprintf("Hello-%d", req.ChanId)), mappedAddr)
@@ -193,7 +198,7 @@ func doTrunRequest(req *TrunRequestST) error {
 		crc32 := crc32.ChecksumIEEE(sendBuf[:crcOffset])
 		binary.BigEndian.PutUint32(sendBuf[crcOffset:], crc32)
 
-		_, err = senderConn.WriteTo(sendBuf, relayConn.LocalAddr())
+		_, err = senderConn.Write(sendBuf)
 		if err != nil {
 			req.Log.Warnf("[TrunRequest-%d]senderConn.WriteTo error:%s", req.ChanId, err)
 			return err
