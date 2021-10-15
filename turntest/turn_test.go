@@ -13,6 +13,37 @@ import (
 	"github.com/pion/logging"
 )
 
+const (
+	basicTurnUrl      = "hellohui.space:3478"
+	basicTurnUsername = ""
+	basicTurnPassword = ""
+	awsDeviceId       = ""
+	awsToken          = ""
+	awsStunUrl        = "stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443"
+)
+
+type RequestBody struct {
+	DeviceId string `json:"deviceId"`
+	Token    string `json:"token"`
+}
+
+type Server struct {
+	Urls     []string `json:"urls"`
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	Expired  int      `json:"expired"`
+}
+
+type ResponseBody struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		SessionId        string   `json:"sessionId"`
+		AppIceServers    []Server `json:"AppIceServers"`
+		DeviceIceServers []Server `json:"DeviceIceServers"`
+	} `json:"data"`
+}
+
 func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) *TrunRequestST {
 	ctx, _ := context.WithTimeout(context.Background(), time.Minute*1)
 
@@ -38,37 +69,10 @@ func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username st
 	return &req
 }
 
-func TestBasic(t *testing.T) {
-	req := makeTrunRequestST("", "hellohui.space:3478", "", "", false)
-	TrunRequest(req)
-}
-
-type RequestBody struct {
-	DeviceId string `json:"deviceId"`
-	Token    string `json:"token"`
-}
-
-type Server struct {
-	Urls     []string `json:"urls"`
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	Expired  int      `json:"expired"`
-}
-
-type ResponseBody struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    struct {
-		SessionId        string   `json:"sessionId"`
-		AppIceServers    []Server `json:"AppIceServers"`
-		DeviceIceServers []Server `json:"DeviceIceServers"`
-	} `json:"data"`
-}
-
 func allocAwsTurn() *ResponseBody {
 	request := RequestBody{
-		DeviceId: "",
-		Token:    "",
+		DeviceId: awsDeviceId,
+		Token:    awsToken,
 	}
 	requestBody := new(bytes.Buffer)
 	json.NewEncoder(requestBody).Encode(request)
@@ -85,6 +89,11 @@ func allocAwsTurn() *ResponseBody {
 	return &respBody
 }
 
+func TestBasic(t *testing.T) {
+	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword, false)
+	TrunRequest(req)
+}
+
 func TestAws(t *testing.T) {
 	respBody := allocAwsTurn()
 
@@ -93,17 +102,16 @@ func TestAws(t *testing.T) {
 			urlStr := respBody.Data.AppIceServers[i].Urls[j]
 			u, _ := url.Parse(urlStr)
 			if u.Scheme == "turn" {
-				req := makeTrunRequestST("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
+				req := makeTrunRequestST(awsStunUrl, u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
 				TrunRequest(req)
 				break
 			}
-
 		}
 	}
 }
 
 func Test2CloudBasic(t *testing.T) {
-	req := makeTrunRequestST("", "hellohui.space:3478", "lihui02", "passwordlh02", false)
+	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword, false)
 	TrunRequest2Cloud(req)
 }
 
@@ -115,11 +123,10 @@ func Test2CloudAws(t *testing.T) {
 			urlStr := respBody.Data.AppIceServers[i].Urls[j]
 			u, _ := url.Parse(urlStr)
 			if u.Scheme == "turn" {
-				req := makeTrunRequestST("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
+				req := makeTrunRequestST(awsStunUrl, u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
 				TrunRequest2Cloud(req)
 				break
 			}
-
 		}
 	}
 }

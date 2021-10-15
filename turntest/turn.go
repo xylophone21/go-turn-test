@@ -17,6 +17,10 @@ import (
 const (
 	minPackageSize = 128
 	minPackageWait = time.Microsecond * 100
+
+	chanIdOffset  = 0
+	timeLenOffset = chanIdOffset + 8
+	timeOffset    = timeLenOffset + 4
 )
 
 type TrunRequestST struct {
@@ -38,14 +42,14 @@ type relayClient struct {
 	RelayConn net.PacketConn
 }
 
-func TrunRequest(req *TrunRequestST) error {
+func requestWrap(req *TrunRequestST, doRequest func(req *TrunRequestST) error) error {
 	if req == nil {
-		err := fmt.Errorf("[TrunRequest-unkonw]req nil")
+		err := fmt.Errorf("[requestWrap-unkonw]req nil")
 		return err
 	}
 
 	if req.Ctx == nil || req.Log == nil || req.PackageSize < minPackageSize || req.PackageWait < minPackageWait || req.TurnServerAddr == "" {
-		err := fmt.Errorf("[TrunRequest-%d]Paramters error", req.ChanId)
+		err := fmt.Errorf("[requestWrap-%d]Paramters error", req.ChanId)
 		return err
 	}
 
@@ -54,7 +58,7 @@ func TrunRequest(req *TrunRequestST) error {
 	}
 
 	for {
-		doTrunRequest(req)
+		doRequest(req)
 
 		// timeout or canceled, return
 		select {
@@ -68,278 +72,57 @@ func TrunRequest(req *TrunRequestST) error {
 	}
 }
 
-func doTrunRequest(req *TrunRequestST) error {
-	var lc net.ListenConfig
-	conn, err := lc.ListenPacket(req.Ctx, "udp4", "0.0.0.0:0")
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]ListenPacket error:%s", req.ChanId, err)
-		return err
-	}
-	defer conn.Close()
-
-	cfg := &turn.ClientConfig{
-		STUNServerAddr: req.StunServerAddr,
-		TURNServerAddr: req.TurnServerAddr,
-		Conn:           conn,
-		Username:       req.Username,
-		Password:       req.Password,
-		Realm:          "go-turn-test",
-		RTO:            time.Second,
-	}
-	client, err := turn.NewClient(cfg)
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]turn.NewClient error:%s", req.ChanId, err)
-		return err
-	}
-	defer client.Close()
-
-	// Start listening on the conn provided.
-	err = client.Listen()
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]client.Listen() error:%s", req.ChanId, err)
-		return err
-	}
-
-	relayConn, err := client.Allocate()
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]client.Allocate() error:%s", req.ChanId, err)
-		return err
-	}
-	defer relayConn.Close()
-
-	// Set up sender socket (pingerConn)
-	var d net.Dialer
-	senderConn, err := d.DialContext(req.Ctx, relayConn.LocalAddr().Network(), relayConn.LocalAddr().String())
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]d.DialContext error:%s", req.ChanId, err)
-		return err
-	}
-	defer senderConn.Close()
-
-	// Send BindingRequest to learn our external IP
-	mappedAddr, err := client.SendBindingRequest()
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
-		return err
-	}
-
-	// [workaround] server with pulibc ip will usually have a local ip but mapping all port to local ip
-	// so use public ip and connection port
-	if req.PublicIPTst {
-		addrIp := strings.Split(mappedAddr.String(), ":")
-		addrPort := strings.Split(senderConn.LocalAddr().String(), ":")
-		mappedAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%s", addrIp[0], addrPort[1]))
-	}
-
-	// added mappedAddr (without port) to permission list in turn server
-	_, err = relayConn.WriteTo([]byte(fmt.Sprintf("Hello-%d", req.ChanId)), mappedAddr)
-	if err != nil {
-		req.Log.Warnf("[TrunRequest-%d]relayConn.WriteTo error:%s", req.ChanId, err)
-		return err
-	}
-
-	chanIdOffset := 0
-	timeLenOffset := chanIdOffset + 8
-	timeOffset := timeLenOffset + 4
-	crcOffset := req.PackageSize - 8
-
-	time.Sleep(500 * time.Millisecond)
-
-	timeSend := time.Now()
-
-	// Start read-loop on relayConn
-	go func() {
-		var byteRecv uint64 = 0
-		recvBuf := make([]byte, req.PackageSize+32)
-		for {
-			n, _, err := relayConn.ReadFrom(recvBuf)
-			if err != nil {
-				req.Log.Warnf("[TrunRequest-%d]relayConn.ReadFrom error:%s", req.ChanId, err)
-				return
-			}
-
-			if n != int(req.PackageSize) {
-				req.Log.Warnf("[TrunRequest-%d]relayConn.ReadFrom len error,want %d got %d", req.ChanId, req.PackageSize, n)
-			}
-
-			chanId := binary.BigEndian.Uint64(recvBuf[chanIdOffset:])
-			if chanId != req.ChanId {
-				req.Log.Warnf("[TrunRequest-%d]chanId error:%d", req.ChanId, chanId)
-			}
-
-			timeLen := int(binary.BigEndian.Uint32(recvBuf[timeLenOffset:]))
-
-			timeStr := string(recvBuf[timeOffset : timeOffset+timeLen])
-			sentAt, err := time.Parse(time.RFC3339Nano, timeStr)
-			if err != nil {
-				req.Log.Warnf("[TrunRequest-%d]time.Parse error:%s", req.ChanId, err)
-			}
-
-			crc32Get := binary.BigEndian.Uint32(recvBuf[crcOffset:])
-			crc32Sum := crc32.ChecksumIEEE(recvBuf[:crcOffset])
-			if crc32Get != crc32Sum {
-				req.Log.Warnf("[TrunRequest-%d]crc error, want %x got %x", req.ChanId, crc32Sum, crc32Get)
-			}
-
-			byteRecv += uint64(n)
-			since := time.Since(timeSend).Seconds()
-
-			delay := time.Since(sentAt).Milliseconds()
-
-			if err == nil {
-				if delay > 0 {
-					req.Log.Tracef("[TrunRequest-%d] Recv %d kps delay=%d", req.ChanId, int(8*float64(byteRecv)/since/1024), delay)
-				}
-			}
-		}
-	}()
-
-	sendBuf := make([]byte, req.PackageSize)
-	rand.Read(sendBuf)
-
-	var byteSend uint64 = 0
+func readAndVerifyDataback(req *TrunRequestST, conn net.PacketConn, start time.Time) {
+	var byteRecv uint64 = 0
+	recvBuf := make([]byte, req.PackageSize+32)
 	for {
-		binary.BigEndian.PutUint64(sendBuf[chanIdOffset:], req.ChanId)
-
-		nowStr := time.Now().Format(time.RFC3339Nano)
-		binary.BigEndian.PutUint32(sendBuf[timeLenOffset:], uint32(len(nowStr)))
-		copy(sendBuf[timeOffset:], []byte(nowStr))
-
-		crc32 := crc32.ChecksumIEEE(sendBuf[:crcOffset])
-		binary.BigEndian.PutUint32(sendBuf[crcOffset:], crc32)
-
-		_, err = senderConn.Write(sendBuf)
+		n, _, err := conn.ReadFrom(recvBuf)
 		if err != nil {
-			req.Log.Warnf("[TrunRequest-%d]senderConn.WriteTo error:%s", req.ChanId, err)
-			return err
+			req.Log.Warnf("[readAndVerifyDataback-%d]conn.ReadFrom error:%s", req.ChanId, err)
+			return
 		}
-		byteSend += uint64(len(sendBuf))
 
-		time.Sleep(req.PackageWait)
-
-		since := time.Since(timeSend).Seconds()
-
-		if since > 0 {
-			req.Log.Tracef("[TrunRequest-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
-		}
-	}
-}
-
-// PeerA <--> RelayA  <---> RelayB  <---> PeerB
-func TrunRequest2Cloud(req *TrunRequestST) error {
-	if req == nil {
-		err := fmt.Errorf("[TrunRequest2Cloud-unkonw]req nil")
-		return err
-	}
-
-	if req.Ctx == nil || req.Log == nil || req.PackageSize < minPackageSize || req.PackageWait < minPackageWait || req.TurnServerAddr == "" {
-		err := fmt.Errorf("[TrunRequest2Cloud-%d]Paramters error", req.ChanId)
-		return err
-	}
-
-	if req.StunServerAddr == "" {
-		req.StunServerAddr = req.TurnServerAddr
-	}
-
-	for {
-		doTrunRequest2Cloud(req)
-
-		// timeout or canceled, return
-		select {
-		case <-req.Ctx.Done():
-			return nil
-
-		// wait 100 Microsecond and retry
-		case <-time.After(100 * time.Millisecond):
+		if string(recvBuf[:n]) == "Hello" {
 			continue
 		}
+
+		if n != int(req.PackageSize) {
+			req.Log.Warnf("[readAndVerifyDataback-%d]conn.ReadFrom len error,want %d got %d", req.ChanId, req.PackageSize, n)
+		}
+
+		chanId := binary.BigEndian.Uint64(recvBuf[chanIdOffset:])
+		if chanId != req.ChanId {
+			req.Log.Warnf("[readAndVerifyDataback-%d]chanId error:%d", req.ChanId, chanId)
+		}
+
+		timeLen := int(binary.BigEndian.Uint32(recvBuf[timeLenOffset:]))
+
+		timeStr := string(recvBuf[timeOffset : timeOffset+timeLen])
+		sentAt, err := time.Parse(time.RFC3339Nano, timeStr)
+		if err != nil {
+			req.Log.Warnf("[readAndVerifyDataback-%d]time.Parse error:%s", req.ChanId, err)
+		}
+
+		crc32Get := binary.BigEndian.Uint32(recvBuf[req.PackageSize-8:])
+		crc32Sum := crc32.ChecksumIEEE(recvBuf[:req.PackageSize-8])
+		if crc32Get != crc32Sum {
+			req.Log.Warnf("[readAndVerifyDataback-%d]crc error, want %x got %x", req.ChanId, crc32Sum, crc32Get)
+		}
+
+		byteRecv += uint64(n)
+		since := time.Since(start).Seconds()
+
+		delay := time.Since(sentAt).Milliseconds()
+
+		if err == nil {
+			if delay > 0 {
+				req.Log.Tracef("[readAndVerifyDataback-%d] Recv %d kps delay=%d", req.ChanId, int(8*float64(byteRecv)/since/1024), delay)
+			}
+		}
 	}
 }
 
-func doTrunRequest2Cloud(req *TrunRequestST) error {
-	relay1, err := allocRelayClient(req)
-	if err != nil {
-		return err
-	}
-	defer freeRelayClient(relay1)
-
-	relay2, err := allocRelayClient(req)
-	if err != nil {
-		return err
-	}
-	defer freeRelayClient(relay2)
-
-	// added mappedAddr (without port) to permission list in turn server
-	_, err = relay1.RelayConn.WriteTo([]byte("Hello"), relay2.RelayConn.LocalAddr())
-	if err != nil {
-		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
-		return err
-	}
-	_, err = relay2.RelayConn.WriteTo([]byte("Hello"), relay1.RelayConn.LocalAddr())
-	if err != nil {
-		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
-		return err
-	}
-
-	chanIdOffset := 0
-	timeLenOffset := chanIdOffset + 8
-	timeOffset := timeLenOffset + 4
-	crcOffset := req.PackageSize - 8
-
-	// time.Sleep(500 * time.Millisecond)
-
-	timeSend := time.Now()
-	// Start read-loop on relayConn
-	go func() {
-		var byteRecv uint64 = 0
-		recvBuf := make([]byte, req.PackageSize+32)
-		for {
-			n, _, err := relay2.RelayConn.ReadFrom(recvBuf)
-			if err != nil {
-				req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.ReadFrom error:%s", req.ChanId, err)
-				return
-			}
-
-			if string(recvBuf[:n]) == "Hello" {
-				continue
-			}
-
-			if n != int(req.PackageSize) {
-				req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.ReadFrom len error,want %d got %d", req.ChanId, req.PackageSize, n)
-			}
-
-			chanId := binary.BigEndian.Uint64(recvBuf[chanIdOffset:])
-			if chanId != req.ChanId {
-				req.Log.Warnf("[TrunRequest2Cloud-%d]chanId error:%d", req.ChanId, chanId)
-			}
-
-			timeLen := int(binary.BigEndian.Uint32(recvBuf[timeLenOffset:]))
-
-			timeStr := string(recvBuf[timeOffset : timeOffset+timeLen])
-			sentAt, err := time.Parse(time.RFC3339Nano, timeStr)
-			if err != nil {
-				req.Log.Warnf("[TrunRequest2Cloud-%d]time.Parse error:%s", req.ChanId, err)
-			}
-
-			crc32Get := binary.BigEndian.Uint32(recvBuf[crcOffset:])
-			crc32Sum := crc32.ChecksumIEEE(recvBuf[:crcOffset])
-			if crc32Get != crc32Sum {
-				req.Log.Warnf("[TrunRequest2Cloud-%d]crc error, want %x got %x", req.ChanId, crc32Sum, crc32Get)
-			}
-
-			byteRecv += uint64(n)
-			since := time.Since(timeSend).Seconds()
-
-			delay := time.Since(sentAt).Milliseconds()
-
-			if err == nil {
-				if delay > 0 {
-					req.Log.Tracef("[TrunRequest2Cloud-%d] Recv %d kps delay=%d", req.ChanId, int(8*float64(byteRecv)/since/1024), delay)
-				}
-			}
-		}
-	}()
-
+func sendData(req *TrunRequestST, conn net.PacketConn, toAddr net.Addr, start time.Time) error {
 	sendBuf := make([]byte, req.PackageSize)
 	rand.Read(sendBuf)
 
@@ -351,22 +134,22 @@ func doTrunRequest2Cloud(req *TrunRequestST) error {
 		binary.BigEndian.PutUint32(sendBuf[timeLenOffset:], uint32(len(nowStr)))
 		copy(sendBuf[timeOffset:], []byte(nowStr))
 
-		crc32 := crc32.ChecksumIEEE(sendBuf[:crcOffset])
-		binary.BigEndian.PutUint32(sendBuf[crcOffset:], crc32)
+		crc32 := crc32.ChecksumIEEE(sendBuf[:req.PackageSize-8])
+		binary.BigEndian.PutUint32(sendBuf[req.PackageSize-8:], crc32)
 
-		_, err = relay1.RelayConn.WriteTo(sendBuf, relay2.RelayConn.LocalAddr())
+		_, err := conn.WriteTo(sendBuf, toAddr)
 		if err != nil {
-			req.Log.Warnf("[TrunRequest2Cloud-%d]senderConn.WriteTo error:%s", req.ChanId, err)
+			req.Log.Warnf("[sendData-%d]conn.WriteTo error:%s", req.ChanId, err)
 			return err
 		}
 		byteSend += uint64(len(sendBuf))
 
 		time.Sleep(req.PackageWait)
 
-		since := time.Since(timeSend).Seconds()
+		since := time.Since(start).Seconds()
 
 		if since > 0 {
-			req.Log.Tracef("[TrunRequest2Cloud-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
+			req.Log.Tracef("[sendData-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
 		}
 	}
 }
@@ -437,4 +220,87 @@ func freeRelayClient(relay *relayClient) {
 		relay.RelayConn.Close()
 		relay.RelayConn = nil
 	}
+}
+func doTrunRequest(req *TrunRequestST) error {
+	relay, err := allocRelayClient(req)
+	if err != nil {
+		return err
+	}
+	defer freeRelayClient(relay)
+
+	// Set up sender socket (senderConn)
+	var lc net.ListenConfig
+	senderConn, err := lc.ListenPacket(req.Ctx, "udp4", "0.0.0.0:0")
+	if err != nil {
+		req.Log.Warnf("[doTrunRequest-%d]lc.ListenPacket error:%s", req.ChanId, err)
+		return err
+	}
+	defer senderConn.Close()
+
+	// Send BindingRequest to learn our external IP
+	mappedAddr, err := relay.Client.SendBindingRequest()
+	if err != nil {
+		req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
+		return err
+	}
+
+	// [workaround] server with pulibc ip will usually have a local ip but mapping all port to local ip
+	// so use public ip and connection port
+	if req.PublicIPTst {
+		addrIp := strings.Split(mappedAddr.String(), ":")
+		addrPort := strings.Split(senderConn.LocalAddr().String(), ":")
+		mappedAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%s", addrIp[0], addrPort[1]))
+	}
+
+	// added mappedAddr (without port) to permission list in turn server
+	_, err = relay.RelayConn.WriteTo([]byte("Hello"), mappedAddr)
+	if err != nil {
+		req.Log.Warnf("[TrunRequest-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		return err
+	}
+
+	timeSend := time.Now()
+	go readAndVerifyDataback(req, relay.RelayConn, timeSend)
+
+	return sendData(req, senderConn, relay.RelayConn.LocalAddr(), timeSend)
+}
+
+func doTrunRequest2Cloud(req *TrunRequestST) error {
+	relay1, err := allocRelayClient(req)
+	if err != nil {
+		return err
+	}
+	defer freeRelayClient(relay1)
+
+	relay2, err := allocRelayClient(req)
+	if err != nil {
+		return err
+	}
+	defer freeRelayClient(relay2)
+
+	// added mappedAddr (without port) to permission list in turn server
+	_, err = relay1.RelayConn.WriteTo([]byte("Hello"), relay2.RelayConn.LocalAddr())
+	if err != nil {
+		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		return err
+	}
+	_, err = relay2.RelayConn.WriteTo([]byte("Hello"), relay1.RelayConn.LocalAddr())
+	if err != nil {
+		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		return err
+	}
+
+	timeSend := time.Now()
+	go readAndVerifyDataback(req, relay2.RelayConn, timeSend)
+
+	return sendData(req, relay1.RelayConn, relay2.RelayConn.LocalAddr(), timeSend)
+}
+
+func TrunRequest(req *TrunRequestST) error {
+	return requestWrap(req, doTrunRequest)
+}
+
+// PeerA <--> RelayA  <---> RelayB  <---> PeerB
+func TrunRequest2Cloud(req *TrunRequestST) error {
+	return requestWrap(req, doTrunRequest2Cloud)
 }
