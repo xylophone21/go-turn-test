@@ -13,9 +13,8 @@ import (
 	"github.com/pion/logging"
 )
 
-func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-	defer cancel()
+func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) *TrunRequestST {
+	ctx, _ := context.WithTimeout(context.Background(), time.Minute*1)
 
 	f := logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelTrace,
@@ -36,16 +35,12 @@ func doTurnRequest(StunServerAddr string, TurnServerAddr string, Username string
 
 	log.Infof("TurnServerAddr=%s", TurnServerAddr)
 
-	return TrunRequest(&req)
+	return &req
 }
 
 func TestBasic(t *testing.T) {
-
-	err := doTurnRequest("", "", "", "", true)
-
-	if err != nil {
-		t.FailNow()
-	}
+	req := makeTrunRequestST("", "hellohui.space:3478", "", "", false)
+	TrunRequest(req)
 }
 
 type RequestBody struct {
@@ -70,7 +65,7 @@ type ResponseBody struct {
 	} `json:"data"`
 }
 
-func TestAws(t *testing.T) {
+func allocAwsTurn() *ResponseBody {
 	request := RequestBody{
 		DeviceId: "",
 		Token:    "",
@@ -86,19 +81,45 @@ func TestAws(t *testing.T) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	var respBody ResponseBody
 	json.Unmarshal(body, &respBody)
+
+	return &respBody
+}
+
+func TestAws(t *testing.T) {
+	respBody := allocAwsTurn()
+
 	for i := 0; i < len(respBody.Data.AppIceServers); i++ {
 		for j := 0; j < len(respBody.Data.AppIceServers[i].Urls); j++ {
 			urlStr := respBody.Data.AppIceServers[i].Urls[j]
 			u, _ := url.Parse(urlStr)
 			if u.Scheme == "turn" {
-				err := doTurnRequest("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
-				if err != nil {
-					t.FailNow()
-				}
+				req := makeTrunRequestST("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
+				TrunRequest(req)
 				break
 			}
 
 		}
 	}
+}
 
+func Test2CloudBasic(t *testing.T) {
+	req := makeTrunRequestST("", "hellohui.space:3478", "lihui02", "passwordlh02", false)
+	TrunRequest2Cloud(req)
+}
+
+func Test2CloudAws(t *testing.T) {
+	respBody := allocAwsTurn()
+
+	for i := 0; i < len(respBody.Data.AppIceServers); i++ {
+		for j := 0; j < len(respBody.Data.AppIceServers[i].Urls); j++ {
+			urlStr := respBody.Data.AppIceServers[i].Urls[j]
+			u, _ := url.Parse(urlStr)
+			if u.Scheme == "turn" {
+				req := makeTrunRequestST("stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443", u.Opaque, respBody.Data.AppIceServers[i].Username, respBody.Data.AppIceServers[i].Password, true)
+				TrunRequest2Cloud(req)
+				break
+			}
+
+		}
+	}
 }
