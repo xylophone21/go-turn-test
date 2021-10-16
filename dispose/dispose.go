@@ -44,7 +44,7 @@ func checkAndDefaultRequest(req *DisposeRequestST) error {
 	}
 
 	if req.Source == SOURCE_BASE && req.TurnServerAddr == "" {
-		return fmt.Errorf("req nil")
+		return fmt.Errorf("base mode without turn server")
 	}
 
 	if req.ChanCount == 0 {
