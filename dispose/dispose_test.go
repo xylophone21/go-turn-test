@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/pion/logging"
 )
@@ -33,6 +34,7 @@ func TestBasic(t *testing.T) {
 		TurnServerAddr: basicTurnUrl,
 		Username:       basicTurnUsername,
 		Password:       basicTurnPassword,
+		Duration:       time.Second * 10,
 	}
 
 	err := Dispose(req)

@@ -70,6 +70,8 @@ func sendSuccessRequestResults(req *TrunRequestST, isSent bool, bytes uint64, la
 			result.Latency = *latency
 		}
 
+		req.Log.Tracef("SendResult-%v isSent=%v Bytes=%v", result.ChanID, result.IsSent, result.Bytes)
+
 		req.Ch <- result
 	}
 }
@@ -191,10 +193,9 @@ func sendData(req *TrunRequestST, conn net.PacketConn, toAddr net.Addr, start ti
 		}
 		byteSend += uint64(len(sendBuf))
 
-		time.Sleep(req.PackageWait)
-
 		sendSuccessRequestResults(req, true, uint64(len(sendBuf)), nil)
 
+		time.Sleep(req.PackageWait)
 		since := time.Since(start).Seconds()
 		if since > 0 {
 			req.Log.Infof("[sendData-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
