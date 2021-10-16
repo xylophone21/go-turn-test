@@ -1,10 +1,3 @@
-/**
-* Package statistics
-*
-* User: link1st
-* Date: 2020/9/28
-* Time: 14:02
- */
 package statistics
 
 import (
@@ -20,7 +13,7 @@ func TestBasic(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, canceled := context.WithTimeout(context.Background(), time.Second*15)
 
 	f := logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelTrace,
@@ -42,34 +35,64 @@ func TestBasic(t *testing.T) {
 	}()
 
 	result := RequestResults{
-		ChanID:        0,
-		ReceivedBytes: 1024,
-		IsSucceed:     true,
-		Latency:       time.Millisecond * 10,
-		Time:          time.Now(),
-		InitRet:       true,
+		ChanID:  0,
+		Time:    time.Now(),
+		ErrCode: 0,
+		IsSent:  true,
+		Bytes:   1024,
+		Latency: time.Millisecond * 10,
 	}
+
+	//send 1st
 	ch <- result
 
-	result.ChanID = 1
+	//recv 1st
+	result.IsSent = false
+	result.Time = result.Time.Add(time.Second)
 	ch <- result
 
-	result.InitRet = false
-	result.ChanID = 0
+	//send 2nd
+	result.IsSent = true
+	result.Time = result.Time.Add(time.Second)
+	ch <- result
 
-	time.Sleep(time.Second * 1)
+	//recv 2nd
+	result.IsSent = false
+	result.Time = result.Time.Add(time.Second)
 	result.Latency = time.Millisecond * 5
+	ch <- result
+
+	//send 3rd
+	result.IsSent = true
 	result.Time = result.Time.Add(time.Second)
 	ch <- result
 
-	result.Latency = time.Millisecond * 15
+	//recv 3rd
+	result.IsSent = false
 	result.Time = result.Time.Add(time.Second)
+	result.Latency = time.Millisecond * 15
 	ch <- result
 
 	result.ChanID = 1
-	result.IsSucceed = false
+
+	//send 1st
+	result.IsSent = true
+	result.Time = result.Time.Add(time.Second)
+	ch <- result
+
+	//lost recv 1st
+
+	//send 2nd
+	result.IsSent = true
+	result.Time = result.Time.Add(time.Second)
+	ch <- result
+
+	//recv 2nd error
+	result.IsSent = false
+	result.ErrCode = 1
 	result.Time = result.Time.Add(time.Second)
 	ch <- result
 
 	wg.Wait()
+	canceled()
 }

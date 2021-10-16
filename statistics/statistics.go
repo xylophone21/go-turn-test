@@ -15,12 +15,12 @@ var (
 )
 
 type RequestResults struct {
-	ChanID        uint64
-	Time          time.Time
-	InitRet       bool // first result to init statistics, ingore all result in it, to get right kps
-	ReceivedBytes uint64
-	IsSucceed     bool
-	Latency       time.Duration
+	ChanID  uint64
+	Time    time.Time
+	ErrCode int  // 0 means success, or failed
+	IsSent  bool // sent or receive
+	Bytes   uint64
+	Latency time.Duration // only for receive
 }
 
 type StatisticsRequestST struct {
@@ -32,14 +32,16 @@ type StatisticsRequestST struct {
 }
 
 type statisticsChan struct {
-	FirstTime     time.Time
-	LastTime      time.Time
-	ReceivedBytes uint64
-	LatencyCount  int           // How many time get latency
-	LatencyTotal  time.Duration // total latency
-	FailedCount   int
-	SuccessCount  int
-	LastSuccess   bool
+	FirstTime    time.Time
+	LastTime     time.Time
+	ReceBytes    uint64
+	SentBytes    uint64
+	SentCount    int
+	RecvCount    int
+	ErrCount     int
+	LastSuccess  bool
+	LatencyCount int           // How many time get latency
+	LatencyTotal time.Duration // total latency
 }
 
 type statisticsClient struct {
@@ -121,37 +123,36 @@ func (c *statisticsClient) AddResult(restult *RequestResults) {
 
 	chanClient.LastTime = restult.Time
 
-	if restult.InitRet {
-		return
-	}
-
-	if restult.IsSucceed {
-		chanClient.SuccessCount++
-
-		if !chanClient.LastSuccess {
-			c.successCount++
-		}
-		chanClient.LastSuccess = true
-	} else {
-		chanClient.FailedCount++
+	if restult.ErrCode != 0 {
+		chanClient.ErrCount++
 
 		if chanClient.LastSuccess {
 			c.successCount--
 		}
 		chanClient.LastSuccess = false
+		return
 	}
+
+	if !chanClient.LastSuccess {
+		c.successCount++
+	}
+	chanClient.LastSuccess = true
 
 	if c.successCount > c.maxSuccessCount {
 		c.maxSuccessCount = c.successCount
 	}
 
-	if restult.ReceivedBytes > 0 {
-		chanClient.ReceivedBytes += restult.ReceivedBytes
-	}
+	if restult.IsSent {
+		chanClient.SentCount++
+		chanClient.SentBytes += restult.Bytes
+	} else {
+		chanClient.RecvCount++
+		chanClient.ReceBytes += restult.Bytes
 
-	if restult.Latency > 0 {
-		chanClient.LatencyCount++
-		chanClient.LatencyTotal += restult.Latency
+		if restult.Latency > 0 {
+			chanClient.LatencyCount++
+			chanClient.LatencyTotal += restult.Latency
+		}
 	}
 }
 
@@ -161,8 +162,15 @@ func (c *statisticsClient) LogSummary() {
 
 	gotChanCount := 0
 	successedChanCount := 0
-	successCount := 0
+
+	recvCount := 0
+	recvBytes := uint64(0)
+
+	sentCount := 0
+	sentBytes := uint64(0)
+
 	failedCount := 0
+
 	byteRecv := uint64(0)
 	timeEscape := float64(0)
 
@@ -172,26 +180,37 @@ func (c *statisticsClient) LogSummary() {
 	for _, chanClient := range c.chans {
 		gotChanCount++
 
-		if chanClient.SuccessCount > 0 {
+		if chanClient.RecvCount > 0 {
 			successedChanCount++
 
-			successCount += chanClient.SuccessCount
+			recvCount += chanClient.RecvCount
+			recvBytes += chanClient.ReceBytes
 		}
 
-		if chanClient.FailedCount > 0 {
-			failedCount += chanClient.FailedCount
+		if chanClient.SentCount > 0 {
+			sentCount += chanClient.SentCount
+			sentBytes += chanClient.SentBytes
 		}
 
 		d := chanClient.LastTime.Sub(chanClient.FirstTime).Seconds()
-		if chanClient.ReceivedBytes > 0 && d > 0 {
-			byteRecv += chanClient.ReceivedBytes
+		if chanClient.ReceBytes > 0 && d > 0 {
+			byteRecv += chanClient.ReceBytes
 			timeEscape += d
+		}
+
+		if chanClient.ErrCount > 0 {
+			failedCount += chanClient.ErrCount
 		}
 
 		if chanClient.LatencyTotal > 0 && chanClient.LatencyCount > 0 {
 			latencyTotal += chanClient.LatencyTotal
 			latencyCount += chanClient.LatencyCount
 		}
+	}
+
+	loss := float32(0)
+	if sentCount > 0 {
+		loss = 100 - float32(recvCount)/float32(sentCount)*100
 	}
 
 	kps := 0
@@ -205,10 +224,13 @@ func (c *statisticsClient) LogSummary() {
 	c.log.Infof("Got ChanCount:%v", gotChanCount)
 	c.log.Infof("Successed ChanCount:%v", successedChanCount)
 	c.log.Infof("Max Concurrency ChanCount:%v", c.maxSuccessCount)
-	c.log.Infof("Success turn Count:%v", successCount)
-	c.log.Infof("Failed turn ChanCount:%v", failedCount)
-	c.log.Infof("Total byte Recved:%vK", byteRecv/1024)
-	c.log.Infof("AVG kbps:%v", kps)
+	c.log.Infof("Sent Count:%v", sentCount)
+	c.log.Infof("Sent Bytes(K):%v", sentBytes/1024)
+	c.log.Infof("Recv Count:%v", recvCount)
+	c.log.Infof("Recv Bytes(K):%v", recvBytes/1024)
+	c.log.Infof("AVG Recv kbps:%v", kps)
+	c.log.Infof("Loss:%.2v%%", loss)
+	c.log.Infof("Failed Count:%v", failedCount)
 	c.log.Infof("Avg Latency:%v", latency)
 }
 
@@ -216,25 +238,34 @@ func (c *statisticsClient) LogDetails() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	header := fmt.Sprintf("%10s│%10s│%10s│%15s│%10s|%10s",
-		"chanid", "Success", "Failed", "BytesReced(K)", "Kbps", "Latency")
+	header := fmt.Sprintf("%10s│%10s│%15s│%10s│%15s|%10s|%10s|%10s|%10s",
+		"chanid", "Sent", "SentBytes(K)", "Rece", "ReceBytes(K)", "Kbps", "Loss", "Errors", "Latency")
 	c.log.Info(header)
 
 	for chanid := uint64(0); chanid < c.chanCount; chanid++ {
 		chanClient, ok := c.chans[chanid]
 		if ok {
-			latency := int(float64(chanClient.LatencyTotal.Milliseconds()) * float64(1) / float64(chanClient.LatencyCount))
+			latency := 0
+			if chanClient.LatencyCount > 0 {
+				latency = int(float64(chanClient.LatencyTotal.Milliseconds()) * float64(1) / float64(chanClient.LatencyCount))
+			}
 
 			since := chanClient.LastTime.Sub(chanClient.FirstTime).Seconds()
 			kps := 0
 			if since != 0 {
-				kps = int(8 * float64(chanClient.ReceivedBytes) / since / 1024)
+				kps = int(8 * float64(chanClient.ReceBytes) / since / 1024)
 			}
 
-			result := fmt.Sprintf("%10d│%10d│%10d│%15d|%10d│%10d",
-				chanid, chanClient.SuccessCount, chanClient.FailedCount, chanClient.ReceivedBytes/1024, kps, latency)
+			loss := float32(0)
+			if chanClient.SentCount > 0 {
+				loss = 100 - float32(chanClient.RecvCount)/float32(chanClient.SentCount)*100
+			}
+
+			result := fmt.Sprintf("%10d│%10d│%15d│%10d│%15d|%10d|%10.2f|%10d|%10d",
+				chanid, chanClient.SentCount, chanClient.SentBytes/1024, chanClient.RecvCount, chanClient.ReceBytes/1024, kps, loss, chanClient.ErrCount, latency)
 
 			c.log.Info(result)
 		}
 	}
+	c.log.Info("")
 }
