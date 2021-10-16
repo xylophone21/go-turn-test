@@ -20,7 +20,7 @@ func init() {
 }
 
 func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) *TrunRequestST {
-	ctx, _ := context.WithTimeout(context.Background(), time.Minute*1)
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*15)
 
 	f := logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelTrace,

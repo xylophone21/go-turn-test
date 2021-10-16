@@ -128,6 +128,13 @@ func sendData(req *TrunRequestST, conn net.PacketConn, toAddr net.Addr, start ti
 
 	var byteSend uint64 = 0
 	for {
+		select {
+		case <-req.Ctx.Done():
+			return nil
+
+		default:
+		}
+
 		binary.BigEndian.PutUint64(sendBuf[chanIdOffset:], req.ChanId)
 
 		nowStr := time.Now().Format(time.RFC3339Nano)
@@ -262,7 +269,12 @@ func doTrunRequest(req *TrunRequestST) error {
 	timeSend := time.Now()
 	go readAndVerifyDataback(req, relay.RelayConn, timeSend)
 
-	return sendData(req, senderConn, relay.RelayConn.LocalAddr(), timeSend)
+	err = sendData(req, senderConn, relay.RelayConn.LocalAddr(), timeSend)
+
+	relay.Client.Close()
+	senderConn.Close()
+
+	return nil
 }
 
 func doTrunRequest2Cloud(req *TrunRequestST) error {
@@ -293,7 +305,11 @@ func doTrunRequest2Cloud(req *TrunRequestST) error {
 	timeSend := time.Now()
 	go readAndVerifyDataback(req, relay2.RelayConn, timeSend)
 
-	return sendData(req, relay1.RelayConn, relay2.RelayConn.LocalAddr(), timeSend)
+	err = sendData(req, relay1.RelayConn, relay2.RelayConn.LocalAddr(), timeSend)
+	relay1.RelayConn.Close()
+	relay2.RelayConn.Close()
+
+	return err
 }
 
 func TrunRequest(req *TrunRequestST) error {
