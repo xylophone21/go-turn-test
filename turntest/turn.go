@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/turn/v2"
+	"github.com/xylophone21/go-turn-test/statistics"
 )
 
 const (
@@ -34,12 +35,43 @@ type TrunRequestST struct {
 	Username       string
 	Password       string
 	PublicIPTst    bool // AWS TURN doest not ignored port in create permission and and will not response for BindingRequest, so we have to test it with public IP
+	Ch             chan statistics.RequestResults
 }
 
 type relayClient struct {
 	Conn      net.PacketConn
 	Client    *turn.Client
 	RelayConn net.PacketConn
+}
+
+func sendErrorRequestResults(req *TrunRequestST, errCode int) {
+	if req.Ch != nil {
+		result := statistics.RequestResults{
+			ChanID:  req.ChanId,
+			Time:    time.Now(),
+			ErrCode: errCode,
+		}
+
+		req.Ch <- result
+	}
+}
+
+func sendSuccessRequestResults(req *TrunRequestST, isSent bool, bytes uint64, latency *time.Duration) {
+	if req.Ch != nil {
+		result := statistics.RequestResults{
+			ChanID:  req.ChanId,
+			Time:    time.Now(),
+			ErrCode: 0,
+			IsSent:  isSent,
+			Bytes:   bytes,
+		}
+
+		if !isSent {
+			result.Latency = *latency
+		}
+
+		req.Ch <- result
+	}
 }
 
 func requestWrap(req *TrunRequestST, doRequest func(req *TrunRequestST) error) error {
@@ -79,6 +111,7 @@ func readAndVerifyDataback(req *TrunRequestST, conn net.PacketConn, start time.T
 		n, _, err := conn.ReadFrom(recvBuf)
 		if err != nil {
 			req.Log.Warnf("[readAndVerifyDataback-%d]conn.ReadFrom error:%s", req.ChanId, err)
+			sendErrorRequestResults(req, 1000)
 			return
 		}
 
@@ -88,11 +121,15 @@ func readAndVerifyDataback(req *TrunRequestST, conn net.PacketConn, start time.T
 
 		if n != int(req.PackageSize) {
 			req.Log.Warnf("[readAndVerifyDataback-%d]conn.ReadFrom len error,want %d got %d", req.ChanId, req.PackageSize, n)
+			sendErrorRequestResults(req, 1001)
+			continue
 		}
 
 		chanId := binary.BigEndian.Uint64(recvBuf[chanIdOffset:])
 		if chanId != req.ChanId {
 			req.Log.Warnf("[readAndVerifyDataback-%d]chanId error:%d", req.ChanId, chanId)
+			sendErrorRequestResults(req, 1002)
+			continue
 		}
 
 		timeLen := int(binary.BigEndian.Uint32(recvBuf[timeLenOffset:]))
@@ -101,23 +138,25 @@ func readAndVerifyDataback(req *TrunRequestST, conn net.PacketConn, start time.T
 		sentAt, err := time.Parse(time.RFC3339Nano, timeStr)
 		if err != nil {
 			req.Log.Warnf("[readAndVerifyDataback-%d]time.Parse error:%s", req.ChanId, err)
+			sendErrorRequestResults(req, 1003)
+			continue
 		}
 
 		crc32Get := binary.BigEndian.Uint32(recvBuf[req.PackageSize-8:])
 		crc32Sum := crc32.ChecksumIEEE(recvBuf[:req.PackageSize-8])
 		if crc32Get != crc32Sum {
 			req.Log.Warnf("[readAndVerifyDataback-%d]crc error, want %x got %x", req.ChanId, crc32Sum, crc32Get)
+			sendErrorRequestResults(req, 1004)
+			continue
 		}
 
 		byteRecv += uint64(n)
+		delay := time.Since(sentAt)
+		sendSuccessRequestResults(req, false, uint64(n), &delay)
+
 		since := time.Since(start).Seconds()
-
-		delay := time.Since(sentAt).Milliseconds()
-
-		if err == nil {
-			if delay > 0 {
-				req.Log.Tracef("[readAndVerifyDataback-%d] Recv %d kps delay=%d", req.ChanId, int(8*float64(byteRecv)/since/1024), delay)
-			}
+		if delay.Milliseconds() > 0 {
+			req.Log.Infof("[readAndVerifyDataback-%d] Recv %d kps delay=%d", req.ChanId, int(8*float64(byteRecv)/since/1024), delay.Milliseconds())
 		}
 	}
 }
@@ -147,16 +186,18 @@ func sendData(req *TrunRequestST, conn net.PacketConn, toAddr net.Addr, start ti
 		_, err := conn.WriteTo(sendBuf, toAddr)
 		if err != nil {
 			req.Log.Warnf("[sendData-%d]conn.WriteTo error:%s", req.ChanId, err)
+			sendErrorRequestResults(req, 2000)
 			return err
 		}
 		byteSend += uint64(len(sendBuf))
 
 		time.Sleep(req.PackageWait)
 
-		since := time.Since(start).Seconds()
+		sendSuccessRequestResults(req, true, uint64(len(sendBuf)), nil)
 
+		since := time.Since(start).Seconds()
 		if since > 0 {
-			req.Log.Tracef("[sendData-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
+			req.Log.Infof("[sendData-%d] Send %d kps", req.ChanId, int(8*float64(byteSend)/since/1024))
 		}
 	}
 }
@@ -231,6 +272,7 @@ func freeRelayClient(relay *relayClient) {
 func doTrunRequest(req *TrunRequestST) error {
 	relay, err := allocRelayClient(req)
 	if err != nil {
+		sendErrorRequestResults(req, 100)
 		return err
 	}
 	defer freeRelayClient(relay)
@@ -240,6 +282,7 @@ func doTrunRequest(req *TrunRequestST) error {
 	senderConn, err := lc.ListenPacket(req.Ctx, "udp4", "0.0.0.0:0")
 	if err != nil {
 		req.Log.Warnf("[doTrunRequest-%d]lc.ListenPacket error:%s", req.ChanId, err)
+		sendErrorRequestResults(req, 101)
 		return err
 	}
 	defer senderConn.Close()
@@ -248,6 +291,7 @@ func doTrunRequest(req *TrunRequestST) error {
 	mappedAddr, err := relay.Client.SendBindingRequest()
 	if err != nil {
 		req.Log.Warnf("[TrunRequest-%d]client.SendBindingRequest() error:%s", req.ChanId, err)
+		sendErrorRequestResults(req, 102)
 		return err
 	}
 
@@ -263,6 +307,7 @@ func doTrunRequest(req *TrunRequestST) error {
 	_, err = relay.RelayConn.WriteTo([]byte("Hello"), mappedAddr)
 	if err != nil {
 		req.Log.Warnf("[TrunRequest-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		sendErrorRequestResults(req, 103)
 		return err
 	}
 
@@ -280,12 +325,14 @@ func doTrunRequest(req *TrunRequestST) error {
 func doTrunRequest2Cloud(req *TrunRequestST) error {
 	relay1, err := allocRelayClient(req)
 	if err != nil {
+		sendErrorRequestResults(req, 200)
 		return err
 	}
 	defer freeRelayClient(relay1)
 
 	relay2, err := allocRelayClient(req)
 	if err != nil {
+		sendErrorRequestResults(req, 201)
 		return err
 	}
 	defer freeRelayClient(relay2)
@@ -294,11 +341,13 @@ func doTrunRequest2Cloud(req *TrunRequestST) error {
 	_, err = relay1.RelayConn.WriteTo([]byte("Hello"), relay2.RelayConn.LocalAddr())
 	if err != nil {
 		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		sendErrorRequestResults(req, 202)
 		return err
 	}
 	_, err = relay2.RelayConn.WriteTo([]byte("Hello"), relay1.RelayConn.LocalAddr())
 	if err != nil {
 		req.Log.Warnf("[TrunRequest2Cloud-%d]relayConn.WriteTo error:%s", req.ChanId, err)
+		sendErrorRequestResults(req, 203)
 		return err
 	}
 

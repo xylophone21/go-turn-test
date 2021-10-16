@@ -86,7 +86,6 @@ func ReceivingResults(req *StatisticsRequestST) error {
 		case <-req.Ctx.Done():
 			client.LogDetails()
 			client.LogSummary()
-
 			return nil
 		}
 	}

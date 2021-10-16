@@ -120,6 +120,7 @@ func Dispose(req *DisposeRequestST) error {
 			ChanId:      i,
 			PackageSize: req.PackageSize,
 			PackageWait: req.PackageWait,
+			Ch:          ch,
 		}
 
 		if req.Source == SOURCE_BASE {
