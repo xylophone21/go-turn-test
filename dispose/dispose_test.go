@@ -17,10 +17,6 @@ func init() {
 	basicTurnUrl = os.Getenv("turnUrl")
 	basicTurnUsername = os.Getenv("turnUsername")
 	basicTurnPassword = os.Getenv("turnPassword")
-
-	basicTurnUrl = "hellohui.space:3478"
-	basicTurnUsername = "lihui02"
-	basicTurnPassword = "passwordlh02"
 }
 
 func TestBasic(t *testing.T) {

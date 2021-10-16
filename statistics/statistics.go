@@ -79,7 +79,7 @@ func ReceivingResults(req *StatisticsRequestST) error {
 		for {
 			select {
 			case <-time.After(req.ExportStatisticsTime):
-				client.LogDetails()
+				client.logDetails()
 
 			case <-req.Ctx.Done():
 				return
@@ -90,19 +90,19 @@ func ReceivingResults(req *StatisticsRequestST) error {
 	for {
 		select {
 		case ret := <-req.Ch:
-			client.AddResult(&ret)
+			client.addResult(&ret)
 
 		case <-req.Ctx.Done():
-			client.LogDetails()
-			client.LogSummary()
+			client.logDetails()
+			client.logSummary()
 			return nil
 		}
 	}
 }
 
-func (c *statisticsClient) AddResult(result *RequestResults) {
+func (c *statisticsClient) addResult(result *RequestResults) {
 	if result == nil {
-		c.log.Debugf("AddResult nil result")
+		c.log.Debugf("addResult nil result")
 		return
 	}
 
@@ -110,12 +110,12 @@ func (c *statisticsClient) AddResult(result *RequestResults) {
 	defer c.lock.Unlock()
 
 	if result.ChanID > c.chanCount {
-		c.log.Debugf("AddResult ChanID(%d) > chanCount", result.ChanID, c.chanCount)
+		c.log.Debugf("addResult ChanID(%d) > chanCount", result.ChanID, c.chanCount)
 		return
 	}
 
 	if result.Time.IsZero() {
-		c.log.Debugf("AddResult Time nil")
+		c.log.Debugf("addResult Time nil")
 		return
 	}
 
@@ -141,7 +141,7 @@ func (c *statisticsClient) AddResult(result *RequestResults) {
 		return
 	}
 
-	c.log.Tracef("AddResult-%v success isSent=%v Bytes=%v", result.ChanID, result.IsSent, result.Bytes)
+	c.log.Tracef("addResult-%v success isSent=%v Bytes=%v", result.ChanID, result.IsSent, result.Bytes)
 
 	if !chanClient.LastSuccess {
 		c.successCount++
@@ -166,7 +166,7 @@ func (c *statisticsClient) AddResult(result *RequestResults) {
 	}
 }
 
-func (c *statisticsClient) LogSummary() {
+func (c *statisticsClient) logSummary() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -244,7 +244,7 @@ func (c *statisticsClient) LogSummary() {
 	c.log.Infof("Avg Latency:%v", latency)
 }
 
-func (c *statisticsClient) LogDetails() {
+func (c *statisticsClient) logDetails() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
