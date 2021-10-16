@@ -75,13 +75,22 @@ func ReceivingResults(req *StatisticsRequestST) error {
 		chans:     make(map[uint64]*statisticsChan),
 	}
 
+	go func() {
+		for {
+			select {
+			case <-time.After(req.ExportStatisticsTime):
+				client.LogDetails()
+
+			case <-req.Ctx.Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case ret := <-req.Ch:
 			client.AddResult(&ret)
-
-		case <-time.After(req.ExportStatisticsTime):
-			client.LogDetails()
 
 		case <-req.Ctx.Done():
 			client.LogDetails()
