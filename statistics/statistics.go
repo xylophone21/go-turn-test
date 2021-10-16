@@ -207,6 +207,7 @@ func (c *statisticsClient) LogSummary() {
 	c.log.Infof("Max Concurrency ChanCount:%v", c.maxSuccessCount)
 	c.log.Infof("Success turn Count:%v", successCount)
 	c.log.Infof("Failed turn ChanCount:%v", failedCount)
+	c.log.Infof("Total byte Recved:%vK", byteRecv/1024)
 	c.log.Infof("AVG kbps:%v", kps)
 	c.log.Infof("Avg Latency:%v", latency)
 }
@@ -215,8 +216,8 @@ func (c *statisticsClient) LogDetails() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	header := fmt.Sprintf("%10s│%10s│%10s│%10s│%10s",
-		"chanid", "Success", "Failed", "Kbps", "Latency")
+	header := fmt.Sprintf("%10s│%10s│%10s│%15s│%10s|%10s",
+		"chanid", "Success", "Failed", "BytesReced(K)", "Kbps", "Latency")
 	c.log.Info(header)
 
 	for chanid := uint64(0); chanid < c.chanCount; chanid++ {
@@ -230,8 +231,8 @@ func (c *statisticsClient) LogDetails() {
 				kps = int(8 * float64(chanClient.ReceivedBytes) / since / 1024)
 			}
 
-			result := fmt.Sprintf("%10d│%10d│%10d│%10d│%10d",
-				chanid, chanClient.SuccessCount, chanClient.FailedCount, kps, latency)
+			result := fmt.Sprintf("%10d│%10d│%10d│%15d|%10d│%10d",
+				chanid, chanClient.SuccessCount, chanClient.FailedCount, chanClient.ReceivedBytes/1024, kps, latency)
 
 			c.log.Info(result)
 		}
