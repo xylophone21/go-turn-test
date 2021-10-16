@@ -29,8 +29,7 @@ type DisposeRequestST struct {
 	StatLogLvl  int
 	ReqLogLvl   int
 
-	Mode        DisposeMode
-	PublicIPTst bool // AWS TURN doest not ignored port in create permission and and will not response for BindingRequest, so we have to test it with public IP
+	Mode DisposeMode
 
 	Source         DisposeSource
 	StunServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
@@ -150,7 +149,6 @@ func Dispose(req *DisposeRequestST) error {
 		}
 
 		if req.Mode == MODE_1CLOUD {
-			turnReq.PublicIPTst = req.PublicIPTst
 			go turntest.TrunRequest(turnReq)
 		} else {
 			go turntest.TrunRequest2Cloud(turnReq)

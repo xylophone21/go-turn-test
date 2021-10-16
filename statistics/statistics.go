@@ -249,7 +249,7 @@ func (c *statisticsClient) logDetails() {
 	defer c.lock.Unlock()
 
 	c.log.Infof("%6s│%6s│%15s│%6s│%15s|%6s|%6s|%6s|%6s",
-		"chanid", "Sent", "SentBytes(K)", "Rece", "RecvBytes(K)", "Kbps", "Loss", "Errors", "Latency")
+		"chanid", "Sent", "SentBytes(K)", "Recv", "RecvBytes(K)", "Kbps", "Loss", "Errors", "Latency")
 
 	for chanid := uint64(0); chanid < c.chanCount; chanid++ {
 		chanClient, ok := c.chans[chanid]

@@ -19,7 +19,7 @@ func init() {
 	basicTurnPassword = os.Getenv("turnPassword")
 }
 
-func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) *TrunRequestST {
+func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string) *TrunRequestST {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*15)
 
 	f := logging.DefaultLoggerFactory{
@@ -37,7 +37,6 @@ func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username st
 	req.TurnServerAddr = TurnServerAddr
 	req.Username = Username
 	req.Password = Password
-	req.PublicIPTst = PublicIPTst
 
 	log.Infof("TurnServerAddr=%s", TurnServerAddr)
 
@@ -45,7 +44,7 @@ func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username st
 }
 
 func TestBasic(t *testing.T) {
-	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword, false)
+	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword)
 	TrunRequest(req)
 }
 
@@ -55,12 +54,12 @@ func TestAws(t *testing.T) {
 		t.Fail()
 	}
 
-	req := makeTrunRequestST(ret.StunServerAddr, ret.TurnServerAddrs[0].TurnServerAddr, ret.TurnServerAddrs[0].Username, ret.TurnServerAddrs[0].Password, true)
+	req := makeTrunRequestST(ret.StunServerAddr, ret.TurnServerAddrs[0].TurnServerAddr, ret.TurnServerAddrs[0].Username, ret.TurnServerAddrs[0].Password)
 	TrunRequest(req)
 }
 
 func Test2CloudBasic(t *testing.T) {
-	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword, false)
+	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword)
 	TrunRequest2Cloud(req)
 }
 
@@ -70,6 +69,6 @@ func Test2CloudAws(t *testing.T) {
 		t.Fail()
 	}
 
-	req := makeTrunRequestST(ret.StunServerAddr, ret.TurnServerAddrs[0].TurnServerAddr, ret.TurnServerAddrs[0].Username, ret.TurnServerAddrs[0].Password, true)
+	req := makeTrunRequestST(ret.StunServerAddr, ret.TurnServerAddrs[0].TurnServerAddr, ret.TurnServerAddrs[0].Username, ret.TurnServerAddrs[0].Password)
 	TrunRequest2Cloud(req)
 }

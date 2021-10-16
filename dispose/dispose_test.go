@@ -24,7 +24,6 @@ func TestBasic(t *testing.T) {
 		StatLogLvl:     int(logging.LogLevelTrace),
 		ReqLogLvl:      int(logging.LogLevelTrace),
 		Mode:           MODE_1CLOUD,
-		PublicIPTst:    false,
 		Source:         SOURCE_BASE,
 		StunServerAddr: basicTurnUrl,
 		TurnServerAddr: basicTurnUrl,
@@ -42,11 +41,10 @@ func TestBasic(t *testing.T) {
 
 func TestAws(t *testing.T) {
 	req := &DisposeRequestST{
-		StatLogLvl:  int(logging.LogLevelTrace),
-		ReqLogLvl:   int(logging.LogLevelTrace),
-		Mode:        MODE_1CLOUD,
-		PublicIPTst: true,
-		Source:      SOURCE_AWS,
+		StatLogLvl: int(logging.LogLevelTrace),
+		ReqLogLvl:  int(logging.LogLevelTrace),
+		Mode:       MODE_1CLOUD,
+		Source:     SOURCE_AWS,
 	}
 
 	err := Dispose(req)
@@ -61,7 +59,6 @@ func TestBase2Cloud(t *testing.T) {
 		StatLogLvl:     int(logging.LogLevelTrace),
 		ReqLogLvl:      int(logging.LogLevelTrace),
 		Mode:           MODE_2CLOUD,
-		PublicIPTst:    false,
 		Source:         SOURCE_BASE,
 		StunServerAddr: basicTurnUrl,
 		TurnServerAddr: basicTurnUrl,
@@ -78,11 +75,10 @@ func TestBase2Cloud(t *testing.T) {
 
 func TestAws2Cloud(t *testing.T) {
 	req := &DisposeRequestST{
-		StatLogLvl:  int(logging.LogLevelTrace),
-		ReqLogLvl:   int(logging.LogLevelTrace),
-		Mode:        MODE_2CLOUD,
-		PublicIPTst: false,
-		Source:      SOURCE_AWS,
+		StatLogLvl: int(logging.LogLevelTrace),
+		ReqLogLvl:  int(logging.LogLevelTrace),
+		Mode:       MODE_2CLOUD,
+		Source:     SOURCE_AWS,
 	}
 
 	err := Dispose(req)

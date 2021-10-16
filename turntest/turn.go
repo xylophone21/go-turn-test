@@ -34,7 +34,6 @@ type TrunRequestST struct {
 	TurnServerAddr string // TURN server addrees (e.g. "turn.abc.com:3478")
 	Username       string
 	Password       string
-	PublicIPTst    bool // AWS TURN doest not ignored port in create permission and and will not response for BindingRequest, so we have to test it with public IP
 	Ch             chan statistics.RequestResults
 }
 
@@ -298,11 +297,10 @@ func doTrunRequest(req *TrunRequestST) error {
 
 	// [workaround] server with pulibc ip will usually have a local ip but mapping all port to local ip
 	// so use public ip and connection port
-	if req.PublicIPTst {
-		addrIp := strings.Split(mappedAddr.String(), ":")
-		addrPort := strings.Split(senderConn.LocalAddr().String(), ":")
-		mappedAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%s", addrIp[0], addrPort[1]))
-	}
+	// for standard mode, port in mappedAddr will be ingore, so changing it will make no error
+	addrIp := strings.Split(mappedAddr.String(), ":")
+	addrPort := strings.Split(senderConn.LocalAddr().String(), ":")
+	mappedAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%s", addrIp[0], addrPort[1]))
 
 	// added mappedAddr (without port) to permission list in turn server
 	_, err = relay.RelayConn.WriteTo([]byte("Hello"), mappedAddr)
