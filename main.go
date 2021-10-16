@@ -32,8 +32,8 @@ func init() {
 	flag.DurationVar(&packageWait, "w", packageWait, "Duration per each send")
 	flag.IntVar(&statLogLvl, "statlog", statLogLvl, "Log level of statistics")
 	flag.IntVar(&reqLogLvl, "reqlog", reqLogLvl, "Log level of request")
-	flag.BoolVar(&is2CloudMode, "t", is2CloudMode, "Using cloud2cloud turn mode")
-	flag.BoolVar(&isAwsMode, "a", isAwsMode, "Using AWS turn server")
+	flag.BoolVar(&is2CloudMode, "2cloud", is2CloudMode, "Using cloud2cloud turn mode")
+	flag.BoolVar(&isAwsMode, "aws", isAwsMode, "Using AWS turn server")
 	flag.StringVar(&stunServer, "stun", stunServer, "Stun server url")
 	flag.StringVar(&turnServer, "turn", stunServer, "Turn server url")
 	flag.StringVar(&username, "u", username, "Username of turn server")
@@ -74,6 +74,11 @@ func main() {
 		req.Source = dispose.SOURCE_BASE
 		server = "{get from aws}"
 	}
+
+	//todo
+	//1. added deviceid and token
+	//2. added paramters check for each mode
+	//3. put debug user & psw to config
 
 	fmt.Printf("Start request %v connections to %v by %v\n", connections, server, mode)
 
