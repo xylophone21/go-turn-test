@@ -2,17 +2,22 @@ package turntest
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
 )
 
-const (
-	basicTurnUrl      = "hellohui.space:3478"
-	basicTurnUsername = ""
-	basicTurnPassword = ""
-)
+var basicTurnUrl string
+var basicTurnUsername string
+var basicTurnPassword string
+
+func init() {
+	basicTurnUrl = os.Getenv("turnUrl")
+	basicTurnUsername = os.Getenv("turnUsername")
+	basicTurnPassword = os.Getenv("turnPassword")
+}
 
 func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string, PublicIPTst bool) *TrunRequestST {
 	ctx, _ := context.WithTimeout(context.Background(), time.Minute*1)

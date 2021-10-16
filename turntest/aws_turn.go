@@ -6,15 +6,17 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
 const (
-	apiurl      = "https://uat.web-rtc.ipcuat.tcljd.cn/v1/call"
-	awsStunUrl  = "stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443"
-	awsDeviceId = ""
-	awsToken    = ""
+	apiurl     = "https://uat.web-rtc.ipcuat.tcljd.cn/v1/call"
+	awsStunUrl = "stun.kinesisvideo.cn-north-1.amazonaws.com.cn:443"
 )
+
+var awsDeviceId string
+var awsToken string
 
 type requestBody struct {
 	DeviceId string `json:"deviceId"`
@@ -48,6 +50,11 @@ type AwsTurnServers struct {
 type AwsTurnsServers struct {
 	StunServerAddr  string
 	TurnServerAddrs []AwsTurnServers
+}
+
+func init() {
+	awsDeviceId = os.Getenv("deviceId")
+	awsToken = os.Getenv("token")
 }
 
 func AllocAwsTurns() (*AwsTurnsServers, error) {
