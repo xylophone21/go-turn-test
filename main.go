@@ -16,7 +16,7 @@ var (
 	packageSize  int           = 1024
 	packageWait  time.Duration = time.Second
 	statLogLvl   int           = int(logging.LogLevelInfo)
-	reqLogLvl    int           = int(logging.LogLevelWarn)
+	reqLogLvl    int           = int(logging.LogLevelError)
 	is2CloudMode bool          = false
 	isAwsMode    bool          = false
 	stunServer   string        = ""
@@ -69,10 +69,10 @@ func main() {
 	var server string
 	if isAwsMode {
 		req.Source = dispose.SOURCE_AWS
-		server = turnServer
+		server = "{get from aws}"
 	} else {
 		req.Source = dispose.SOURCE_BASE
-		server = "{get from aws}"
+		server = turnServer
 	}
 
 	//todo

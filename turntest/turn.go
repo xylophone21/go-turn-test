@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	minPackageSize = 128
+	minPackageSize = 64
 	minPackageWait = time.Microsecond * 100
 
 	chanIdOffset  = 0

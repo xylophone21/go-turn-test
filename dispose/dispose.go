@@ -128,7 +128,6 @@ func Dispose(req *DisposeRequestST) error {
 			turnReq.Username = req.Username
 			turnReq.Password = req.Password
 		} else {
-
 			if awsTurn == nil || index >= len(awsTurn.TurnServerAddrs) {
 				var err error
 				awsTurn, err = turntest.AllocAwsTurns()
