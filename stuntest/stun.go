@@ -11,15 +11,10 @@ import (
 	"github.com/xylophone21/go-turn-test/statistics"
 )
 
-const (
-	minPackageWait = time.Microsecond * 100
-)
-
 type StunRequestST struct {
 	Ctx            context.Context
 	Log            logging.LeveledLogger
 	ChanId         uint64
-	PackageWait    time.Duration
 	StunServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
 	Ch             chan statistics.RequestResults
 }
@@ -43,7 +38,7 @@ func sendSuccessRequestResults(req *StunRequestST, isSent bool, latency *time.Du
 			Time:    time.Now(),
 			ErrCode: 0,
 			IsSent:  isSent,
-			Bytes:   0,
+			Bytes:   128, //128bytes each package, so kbps = qps
 		}
 
 		if !isSent {
@@ -116,21 +111,19 @@ func StunRequest(req *StunRequestST) error {
 		return err
 	}
 
-	if req.Ctx == nil || req.Log == nil || req.PackageWait < minPackageWait || req.StunServerAddr == "" {
+	if req.Ctx == nil || req.Log == nil || req.StunServerAddr == "" {
 		err := fmt.Errorf("[StunRequest-%d]Paramters error", req.ChanId)
 		return err
 	}
 
 	for {
-		doStunRequest(req)
-
 		// timeout or canceled, return
 		select {
 		case <-req.Ctx.Done():
 			return nil
 
-		case <-time.After(req.PackageWait):
-			continue
+		default:
+			doStunRequest(req)
 		}
 	}
 }

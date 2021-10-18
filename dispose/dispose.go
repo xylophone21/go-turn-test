@@ -171,11 +171,10 @@ func Dispose(req *DisposeRequestST) error {
 			}
 		} else if req.Method == METHOD_STUN {
 			stunReq := &stuntest.StunRequestST{
-				Ctx:         ctx,
-				Log:         reqLog,
-				ChanId:      i,
-				PackageWait: req.PackageWait,
-				Ch:          ch,
+				Ctx:    ctx,
+				Log:    reqLog,
+				ChanId: i,
+				Ch:     ch,
 			}
 
 			if req.Source == SOURCE_BASE {

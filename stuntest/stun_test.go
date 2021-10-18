@@ -28,7 +28,6 @@ func makeStunRequestST(StunServerAddr string) *StunRequestST {
 	req.Ctx = ctx
 	req.Log = log
 	req.ChanId = 888
-	req.PackageWait = time.Millisecond * 100
 	req.StunServerAddr = StunServerAddr
 	req.Ch = make(chan statistics.RequestResults)
 
