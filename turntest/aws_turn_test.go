@@ -4,10 +4,16 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/xylophone21/go-turn-test/testdata"
 )
 
 func TestAlloc(t *testing.T) {
-	ret, err := AllocAwsTurns()
+	req := &RequestBody{
+		DeviceId: testdata.AwsDeviceId,
+		Token:    testdata.AwsToken,
+	}
+	ret, err := AllocAwsTurns(req)
 	if err != nil {
 		t.Fail()
 	}

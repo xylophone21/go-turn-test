@@ -18,7 +18,7 @@ const (
 var awsDeviceId string
 var awsToken string
 
-type requestBody struct {
+type RequestBody struct {
 	DeviceId string `json:"deviceId"`
 	Token    string `json:"token"`
 }
@@ -57,11 +57,7 @@ func init() {
 	awsToken = os.Getenv("token")
 }
 
-func AllocAwsTurns() (*AwsTurnsServers, error) {
-	request := requestBody{
-		DeviceId: awsDeviceId,
-		Token:    awsToken,
-	}
+func AllocAwsTurns(request *RequestBody) (*AwsTurnsServers, error) {
 	requestBody := new(bytes.Buffer)
 	json.NewEncoder(requestBody).Encode(request)
 

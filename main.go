@@ -23,6 +23,8 @@ var (
 	turnServer   string        = "hellohui.space:3478"
 	username     string        = ""
 	password     string        = ""
+	awsDeviceId  string        = ""
+	awsToken     string        = ""
 )
 
 func init() {
@@ -38,6 +40,8 @@ func init() {
 	flag.StringVar(&turnServer, "turn", stunServer, "Turn server url")
 	flag.StringVar(&username, "u", username, "Username of turn server")
 	flag.StringVar(&password, "p", password, "Password of turn server")
+	flag.StringVar(&awsDeviceId, "did", awsDeviceId, "Device Id to get AWS servers")
+	flag.StringVar(&awsToken, "token", awsToken, "Token to get AWS servers")
 
 	// 解析参数
 	flag.Parse()
@@ -75,10 +79,7 @@ func main() {
 		server = turnServer
 	}
 
-	//todo
-	//1. added deviceid and token
-	//2. added paramters check for each mode
-	//3. put debug user & psw to config
+	//todo added paramters check for each mode
 
 	fmt.Printf("Start request %v connections to %v by %v\n", connections, server, mode)
 

@@ -2,22 +2,12 @@ package dispose
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/xylophone21/go-turn-test/testdata"
 )
-
-var basicTurnUrl string
-var basicTurnUsername string
-var basicTurnPassword string
-
-func init() {
-	basicTurnUrl = os.Getenv("turnUrl")
-	basicTurnUsername = os.Getenv("turnUsername")
-	basicTurnPassword = os.Getenv("turnPassword")
-}
 
 func TestBasic(t *testing.T) {
 	req := &DisposeRequestST{
@@ -25,10 +15,10 @@ func TestBasic(t *testing.T) {
 		ReqLogLvl:      int(logging.LogLevelTrace),
 		Mode:           MODE_1CLOUD,
 		Source:         SOURCE_BASE,
-		StunServerAddr: basicTurnUrl,
-		TurnServerAddr: basicTurnUrl,
-		Username:       basicTurnUsername,
-		Password:       basicTurnPassword,
+		StunServerAddr: testdata.BasicStunUrl,
+		TurnServerAddr: testdata.BasicTurnUrl,
+		Username:       testdata.BasicTurnUsername,
+		Password:       testdata.BasicTurnPassword,
 		Duration:       time.Second * 10,
 	}
 
@@ -60,10 +50,10 @@ func TestBase2Cloud(t *testing.T) {
 		ReqLogLvl:      int(logging.LogLevelTrace),
 		Mode:           MODE_2CLOUD,
 		Source:         SOURCE_BASE,
-		StunServerAddr: basicTurnUrl,
-		TurnServerAddr: basicTurnUrl,
-		Username:       basicTurnUsername,
-		Password:       basicTurnPassword,
+		StunServerAddr: testdata.BasicStunUrl,
+		TurnServerAddr: testdata.BasicTurnUrl,
+		Username:       testdata.BasicTurnUsername,
+		Password:       testdata.BasicTurnPassword,
 	}
 
 	err := Dispose(req)

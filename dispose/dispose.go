@@ -36,6 +36,9 @@ type DisposeRequestST struct {
 	TurnServerAddr string // TURN server addrees (e.g. "turn.abc.com:3478")
 	Username       string
 	Password       string
+
+	AwsDeviceId string
+	AwsToken    string
 }
 
 func checkAndDefaultRequest(req *DisposeRequestST) error {
@@ -130,7 +133,11 @@ func Dispose(req *DisposeRequestST) error {
 		} else {
 			if awsTurn == nil || index >= len(awsTurn.TurnServerAddrs) {
 				var err error
-				awsTurn, err = turntest.AllocAwsTurns()
+				awsReq := &turntest.RequestBody{
+					DeviceId: req.AwsDeviceId,
+					Token:    req.AwsToken,
+				}
+				awsTurn, err = turntest.AllocAwsTurns(awsReq)
 				if err != nil {
 					reqLog.Errorf("AllocAwsTurns error:%v", err)
 					canceled()

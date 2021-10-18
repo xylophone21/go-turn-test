@@ -2,22 +2,12 @@ package turntest
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/xylophone21/go-turn-test/testdata"
 )
-
-var basicTurnUrl string
-var basicTurnUsername string
-var basicTurnPassword string
-
-func init() {
-	basicTurnUrl = os.Getenv("turnUrl")
-	basicTurnUsername = os.Getenv("turnUsername")
-	basicTurnPassword = os.Getenv("turnPassword")
-}
 
 func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username string, Password string) *TrunRequestST {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*15)
@@ -44,12 +34,16 @@ func makeTrunRequestST(StunServerAddr string, TurnServerAddr string, Username st
 }
 
 func TestBasic(t *testing.T) {
-	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword)
+	req := makeTrunRequestST(testdata.BasicStunUrl, testdata.BasicTurnUrl, testdata.BasicTurnUsername, testdata.BasicTurnPassword)
 	TrunRequest(req)
 }
 
 func TestAws(t *testing.T) {
-	ret, err := AllocAwsTurns()
+	awsreq := &RequestBody{
+		DeviceId: testdata.AwsDeviceId,
+		Token:    testdata.AwsToken,
+	}
+	ret, err := AllocAwsTurns(awsreq)
 	if err != nil {
 		t.Fail()
 	}
@@ -59,12 +53,16 @@ func TestAws(t *testing.T) {
 }
 
 func Test2CloudBasic(t *testing.T) {
-	req := makeTrunRequestST("", basicTurnUrl, basicTurnUsername, basicTurnPassword)
+	req := makeTrunRequestST(testdata.BasicStunUrl, testdata.BasicTurnUrl, testdata.BasicTurnUsername, testdata.BasicTurnPassword)
 	TrunRequest2Cloud(req)
 }
 
 func Test2CloudAws(t *testing.T) {
-	ret, err := AllocAwsTurns()
+	awsreq := &RequestBody{
+		DeviceId: testdata.AwsDeviceId,
+		Token:    testdata.AwsToken,
+	}
+	ret, err := AllocAwsTurns(awsreq)
 	if err != nil {
 		t.Fail()
 	}
