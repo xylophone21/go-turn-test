@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/pion/logging"
@@ -12,6 +13,7 @@ import (
 
 var (
 	connections  uint64        = 5
+	method       int           = dispose.METHOD_TURN
 	duration     time.Duration = time.Second * 30
 	packageSize  int           = 1024
 	packageWait  time.Duration = time.Second
@@ -42,6 +44,7 @@ func init() {
 	flag.StringVar(&password, "p", password, "Password of turn server")
 	flag.StringVar(&awsDeviceId, "did", awsDeviceId, "Device Id to get AWS servers")
 	flag.StringVar(&awsToken, "token", awsToken, "Token to get AWS servers")
+	flag.IntVar(&method, "m", method, "Methdo to test, 0-STUN;1-TURN")
 
 	// 解析参数
 	flag.Parse()
@@ -76,7 +79,15 @@ func main() {
 		server = "{get from aws}"
 	} else {
 		req.Source = dispose.SOURCE_BASE
-		server = turnServer
+
+		if method == dispose.METHOD_STUN {
+			server = stunServer
+		} else if method == dispose.METHOD_TURN {
+			server = turnServer
+		} else {
+			fmt.Printf("Run error: error method %v\n", method)
+			os.Exit(-1)
+		}
 	}
 
 	//todo added paramters check for each mode
@@ -86,5 +97,6 @@ func main() {
 	err := dispose.Dispose(req)
 	if err != nil {
 		fmt.Printf("Run error:%v\n", err)
+		os.Exit(-1)
 	}
 }
