@@ -62,6 +62,7 @@ func main() {
 		TurnServerAddr: turnServer,
 		Username:       username,
 		Password:       password,
+		Method:         dispose.DisposeMethod(method),
 	}
 
 	var mode string
